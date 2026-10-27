@@ -1,0 +1,72 @@
+name: Build Mundo Encantado APK
+on:
+  push:
+    paths:
+      - .github/workflows/build-android-apk.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Create Android app
+        run: |
+          mkdir -p app/src/main/java/com/mmsistemas/mundoencantado app/src/main/res/values
+          cat > settings.gradle <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name = 'MundoEncantado'
+          include ':app'
+          EOF
+          cat > build.gradle <<'EOF'
+          plugins { id 'com.android.application' version '8.7.3' apply false }
+          EOF
+          cat > app/build.gradle <<'EOF'
+          plugins { id 'com.android.application' }
+          android {
+            namespace 'com.mmsistemas.mundoencantado'
+            compileSdk 35
+            defaultConfig { applicationId 'com.mmsistemas.mundoencantado'; minSdk 23; targetSdk 35; versionCode 1; versionName '1.0.0' }
+          }
+          EOF
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET"/><application android:theme="@style/AppTheme" android:label="Mundo Encantado" android:usesCleartextTraffic="false"><activity android:name=".MainActivity" android:exported="true" android:screenOrientation="portrait"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>
+          EOF
+          cat > app/src/main/res/values/styles.xml <<'EOF'
+          <resources><style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar"><item name="android:colorAccent">#FFD633</item><item name="android:statusBarColor">#4E2695</item><item name="android:navigationBarColor">#32185F</item><item name="android:windowLightStatusBar">false</item></style></resources>
+          EOF
+          cat > app/src/main/java/com/mmsistemas/mundoencantado/MainActivity.java <<'EOF'
+          package com.mmsistemas.mundoencantado;
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.view.View;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          public class MainActivity extends Activity {
+            WebView web;
+            @Override public void onCreate(Bundle b) { super.onCreate(b); getWindow().setStatusBarColor(0xFF4E2695); getWindow().setNavigationBarColor(0xFF32185F); web=new WebView(this); WebSettings s=web.getSettings(); s.setJavaScriptEnabled(true); s.setDomStorageEnabled(true); s.setDatabaseEnabled(true); web.setOverScrollMode(View.OVER_SCROLL_NEVER); setContentView(web); web.loadUrl("https://m20513703-art.github.io/mundo-encantado-demo/"); }
+            @Override public void onBackPressed() { if(web!=null && web.canGoBack()) web.goBack(); else super.onBackPressed(); }
+            @Override protected void onDestroy() { if(web!=null) web.destroy(); super.onDestroy(); }
+          }
+          EOF
+      - name: Build APK
+        run: gradle --no-daemon assembleDebug
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: mundo-encantado-apk-${{ github.run_number }}
+          name: Mundo Encantado APK ${{ github.run_number }}
+          files: app/build/outputs/apk/debug/app-debug.apk
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
